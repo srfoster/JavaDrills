@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<title>JazzyJava</title>
+<script src="http://code.jquery.com/jquery-1.11.0.min.js"></script>
+<script src="fireworks.js"></script>
+
+<style type="text/css" media="screen">
+    #editor { 
+        position: absolute;
+        top: 50px;
+        right: 0;
+        bottom: 0;
+        left: 0;
+    }
+ 
+    body{
+	padding: 0px;
+	margin: 0px;
+    }
+</style>
+</head>
+<body>
+
+<div id="instructions" style="background-color: white; width: 100%; height: 50px; position: absolute; z-index: 200; border-bottom: 1px solid black;">
+  <img id="arrow" src="ArrowLeft.png" style="position: absolute; left: 600px; width: 100px;"></img>
+  <div style="display:none; width: 220px; height: 30px; margin-left: auto; margin-right: auto; margin-top: 5px; text-align: center;" id="instruction_text">
+    Type the code in from the box on the right into the box on the left.
+  </div>
+
+</div>
+
+<div id="prompt" style="padding: 10px; background-color:white; width: 500px; height: 100%; position:absolute; z-index: 100; right:0px; top: 50px">
+</div>
+
+<div id="editor">
+</div>
+
+
+
+    
+<script src="ace-builds/src-noconflict/ace.js" type="text/javascript" charset="utf-8"></script>
+<script>
+    var audio = new Audio('beep-03.mp3');
+    var audio_good = new Audio('beep1.mp3');
+    var correct_answer = new Audio('success.mp3');
+    var fireworks_sound = new Audio('fireworks.mp3');
+
+    var editor = ace.edit("editor");
+    editor.setTheme("ace/theme/monokai");
+    editor.getSession().setMode("ace/mode/java");
+
+    editor.setBehavioursEnabled(false)
+
+    if(document.location.toString().indexOf("teacher_mode") == -1)
+	    editor.onPaste = function(t){return false}
+
+    setInterval(checkAnswer, 500)
+
+    $("#editor").keydown(function(ev){
+    
+      if(ev.which == 16) return true;
+ 
+      if((editor.getValue().split("\"").length - 1) % 2 == 1 && ev.which != 222)
+      {
+	mistake();
+	return false
+      }
+
+      if((editor.getValue().split("\"").length - 1) % 2 == 1 && ev.which == 222)
+      {
+	earned_point()
+	return true;
+      }
+
+      if(!handle("{","}", 221, 219, ev.which))
+	return false
+
+      if(!handle("[","]", 221, 219, ev.which))
+	return false
+
+      if(!handle("(",")", 48, 57, ev.which))
+	return false
+
+      if(ev.which == 221 || ev.which == 48){
+	earned_point()
+      }
+
+    })
+
+    var points = 0
+    function earned_point()
+    {
+	points += 1
+	audio_good.play()
+    }
+
+    function handle(open, close, code_open, code_close, current_code)
+    {
+      var text = editor.getValue()
+      var open_curlies = text.split(open).length - 1
+      var close_curlies = text.split(close).length - 1
+
+      var balance_curlies = open_curlies - close_curlies
+
+      if(balance_curlies > 0){
+        if(current_code != 13 && current_code != code_open)
+	{
+		mistake();
+		return false;
+	}
+      }
+
+      if(balance_curlies < 0){
+        if(current_code != 13 && current_code != code_close)
+	{
+		mistake();
+		return false;
+	}
+      }
+ 
+      return true
+    }
+
+    var mistakes = 0
+    var slowy = false
+    function mistake(){
+	if(slowy)
+		return
+
+	audio.play()
+	mistakes++
+	slowy = true
+	
+	
+
+	setTimeout(function(){ slowy=false }, 500)
+    } 
+
+
+    function shrinkWrap(){
+      editor.setValue(editor.getValue().replace(/\s+/g," "),0)
+    }
+
+    function autoIndent(){
+       var curlies = allOpenCurlies()
+       for(var i = 0; i < curlies.length; i++)
+	{
+		var current = curlies[i]
+		current.start.row++
+		current.end.row--
+		selectRange(current.start, current.end)
+		editor.indent()
+       		curlies = allOpenCurlies()
+	}
+    }
+
+    function selectRange(start,end)
+    {
+		editor.moveCursorToPosition(start)
+		editor.selection.selectTo(end.row, end.column)
+    }
+
+    function allOpenCurlies(){
+      var ret = []
+      var i = 0
+
+      while(editor.getValue().indexOf("{",i) != -1)
+      {
+	 var current_index = editor.getValue().indexOf("{", i)
+	 var start = toRowCol(current_index-1)	
+	 editor.moveCursorToPosition(start)
+	 editor.jumpToMatching()	
+	 var end = editor.selection.getSelectionAnchor()
+
+         ret.push({start: start, end: end})
+	 i = current_index + 1
+      }
+
+      return ret
+    }
+
+    function toRowCol(index)
+    {
+      var lines = editor.getValue().split("\n")
+      var ret = {row:0, column:0}
+      for(var i = 0; i < lines.length; i++)
+      { 
+         if(index > lines[i].length)
+	 {
+	 	index -= lines[i].length	
+		ret.row++
+	 } else {
+		ret.column = index
+		break
+	 }
+      } 
+
+      return ret;
+    }
+    
+
+    $(document).ready(function(){
+
+	var p = queryObj()["prompt"]
+	p = p.replace(/\n/g,"<br/>")
+	p = p.replace(/ /g,"&nbsp;")
+	$("#prompt").html(p)
+
+        var left_start = $(window).width() / 2 + 300 - 50
+        var left_end = $(window).width() / 2 - 300 - 50
+
+	$("#arrow").css({left: left_start})
+	$("#arrow").animate({left: left_end}, 1000, function(){
+		$("#arrow").css({left: left_start})
+		$("#arrow").animate({left: left_end}, 1000, function(){
+			$("#instruction_text").fadeIn();
+		})
+	})
+    })
+
+    var has_won = false;
+    function checkAnswer()
+    {
+	if(has_won)
+		return;	
+
+	var question = $("#prompt").html()
+	question = question.replace(/<br>/g,"")
+	question = question.replace(/&nbsp;/g,"")
+	question = question.replace(/\s/g, "")
+
+
+	var answer = editor.getValue()
+	answer = answer.replace(/\s/g, "")
+
+	if(question == answer)
+	{
+		if(points >= allOpenCurlies().length)
+		{
+			correct_answer.play()
+			fireworks_sound.play()
+			fireworks();
+			if(mistakes == 0)
+				$("#instruction_text").html("Flawless!")
+			else	
+				$("#instruction_text").html("You made " + mistakes + " mistakes.  Refresh the page to try again.");
+			has_won = true;
+		} else {
+			audio.play();
+			$("#instruction_text").html("Stop cheating.  The instructors have been notified...")
+		}
+	}
+    }
+
+    function editorToUrl()
+    {
+	return "?prompt="+encodeURIComponent(editor.getValue())
+    }
+
+	function queryObj() {
+	    var result = {}, queryString = location.search.slice(1),
+		re = /([^&=]+)=([^&]*)/g, m;
+
+	    while (m = re.exec(queryString)) {
+		result[decodeURIComponent(m[1])] = decodeURIComponent(m[2]);
+	    }
+
+	    return result;
+	}
+
+</script>
+</body>
+</html>
